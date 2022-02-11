@@ -164,7 +164,10 @@ public:
 
     ~NeoEsp32I2sMethodBase()
     {
-        while (!IsReadyToUpdate())
+        int startMillis = millis();
+
+        // Introduced a 500ms timeout since sporadically this hangs indefinitely
+        while ((!IsReadyToUpdate()) && ((millis() - startMillis) < 500)) {
         {
             yield();
         }
@@ -196,8 +199,11 @@ public:
 
     void Update(bool)
     {
+        int startMillis = millis();
+        
         // wait for not actively sending data
-        while (!IsReadyToUpdate())
+        // Introduced a 500ms timeout since sporadically this hangs indefinitely
+        while ((!IsReadyToUpdate()) && ((millis() - startMillis) < 500)) {
         {
             yield();
         }
