@@ -168,7 +168,6 @@ public:
 
         // Introduced a 500ms timeout since sporadically this hangs indefinitely
         while ((!IsReadyToUpdate()) && ((millis() - startMillis) < 500)) {
-        {
             yield();
         }
 
@@ -204,7 +203,6 @@ public:
         // wait for not actively sending data
         // Introduced a 500ms timeout since sporadically this hangs indefinitely
         while ((!IsReadyToUpdate()) && ((millis() - startMillis) < 500)) {
-        {
             yield();
         }
 
