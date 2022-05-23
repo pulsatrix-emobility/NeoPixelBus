@@ -270,7 +270,7 @@ public:
 
         // Need 100% focus on instruction timing
 #if defined(ARDUINO_ARCH_ESP32)
-        delay(1); // required
+        delay(10); // required
         portMUX_TYPE updateMux = portMUX_INITIALIZER_UNLOCKED;
 
         portENTER_CRITICAL(&updateMux);
