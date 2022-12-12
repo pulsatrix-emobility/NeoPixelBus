@@ -197,6 +197,13 @@ public:
 
         _method.Update(maintainBufferConsistency);
 
+        // Wait for transmission to complete (to keep possibly used external mutexes active, only so far)
+        // Introduced a 500ms timeout since sporadically this hangs indefinitely
+        int startMillis = millis();
+        while ((!CanShow()) && ((millis() - startMillis) < 500)) {
+            yield();
+        }
+
         ResetDirty();
     }
 
@@ -408,10 +415,9 @@ public:
     }
 
 protected:
-    const uint16_t _countPixels; // Number of RGB LEDs in strip
-
-    uint8_t _state;     // internal state
-    T_METHOD _method;
+    const uint16_t _countPixels;  // Number of RGB LEDs in strip
+    uint8_t _state;               // Internal state
+    T_METHOD _method;             // Used method (protocol) for the LEDs
 
     uint8_t* _pixels()
     {
