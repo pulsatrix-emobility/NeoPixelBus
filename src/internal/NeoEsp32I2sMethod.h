@@ -35,6 +35,8 @@ extern "C"
 #include "Esp32_i2s.h"
 }
 
+#include "driver/i2s.h"
+
 const uint16_t c_dmaBytesPerPixelBytes = 4;
 
 class NeoEsp32I2sSpeedWs2812x
@@ -142,6 +144,8 @@ public:
     const static bool Inverted = true;
 };
 
+bool initI2C[I2S_NUM_MAX] = {false, false};
+
 template<typename T_SPEED, typename T_BUS, typename T_INVERT> class NeoEsp32I2sMethodBase
 {
 public:
@@ -184,16 +188,20 @@ public:
 
     void Initialize()
     {
-        size_t dmaBlockCount = (_i2sBufferSize + I2S_DMA_MAX_DATA_LEN - 1) / I2S_DMA_MAX_DATA_LEN;
+        if (!initI2C[_bus.I2sBusNumber]) {
+            size_t dmaBlockCount = (_i2sBufferSize + I2S_DMA_MAX_DATA_LEN - 1) / I2S_DMA_MAX_DATA_LEN;
 
-        i2sInit(_bus.I2sBusNumber, 
-            16, 
-            T_SPEED::I2sSampleRate, 
-            I2S_CHAN_STEREO, 
-            I2S_FIFO_16BIT_DUAL, 
-            dmaBlockCount,
-            0);
-        i2sSetPins(_bus.I2sBusNumber, _pin, T_INVERT::Inverted);
+            i2sInit(_bus.I2sBusNumber,
+                16,
+                T_SPEED::I2sSampleRate,
+                I2S_CHAN_STEREO,
+                I2S_FIFO_16BIT_DUAL,
+                dmaBlockCount,
+                0);
+            i2sSetPins(_bus.I2sBusNumber, _pin, T_INVERT::Inverted);
+
+            initI2C[_bus.I2sBusNumber] = true;
+        }
     }
 
     void Update(bool)
