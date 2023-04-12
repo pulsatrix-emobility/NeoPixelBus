@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(ARDUINO_ARCH_ESP32) 
+#if defined(ARDUINO_ARCH_ESP32)
 
 #include "sdkconfig.h" // this sets useful config symbols, like CONFIG_IDF_TARGET_ESP32C3
 
@@ -60,12 +60,35 @@
 
 #define ESP32_REG(addr) (*((volatile uint32_t*)(0x3FF00000+(addr))))
 
+// clang-format off
+// This is the layout of our linked list of DMA buffers:
+//      ┌──────────────────────────────────────────────────────────┐
+//      │                                                          │
+// ┌────▼────┐  ┌───────┐  ┌───────┐  ┌────────┐  ┌─────────┐  ┌───┴───┐
+// │  Start  ├──► Gate  ├──► Intr  ├──► Data 1 ├──► Data N  ├──► End   │
+// │  EOF=0  │  │ EOF=0 │  │ EOF=1 │  │ EOF=0  │  │ EOF=0   │  │ EOF=1 │
+// └────▲────┘  └───┬───┘  └───────┘  └────────┘  └─────────┘  └───────┘
+//      │           │
+//      └───────────┘
+// * The Gate buffer's next buffer is set to Start during idle and to Intr to start sending data
+// * The Intr buffer's EOF is set to true, so that the ISR knows that I2S has started transmitting the data
+// * The End buffer's EOF is also set to true, so that the ISR knows that transmission has completed
+//
+// clang-format on
+
 #define I2S_DMA_BLOCK_COUNT_DEFAULT      16
 // 24 bytes gives us enough time if we use single stage idle
 // with the two stage idle we can use the minimum of 4 bytes
 #define I2S_DMA_SILENCE_SIZE     4*1 
-#define I2S_DMA_SILENCE_BLOCK_COUNT  3 // two front, one back
+#define I2S_DMA_SILENCE_BLOCK_COUNT  4 // Start/Gate/Intr on front, one on end
 #define I2S_DMA_QUEUE_COUNT 2
+
+#define I2S_DMA_START_BLOCK_IDX      0
+#define I2S_DMA_GATE_BLOCK_IDX      1
+#define I2S_DMA_INTR_BLOCK_IDX      2
+#define I2S_DMA_DATA1_BLOCK_IDX      3
+
+
 
 typedef struct i2s_dma_item_s {
     uint32_t  blocksize: 12;    // datalen
@@ -146,11 +169,8 @@ bool i2sInitDmaItems(uint8_t bus_num) {
 
     int i, i2;
     i2s_dma_item_t* item = NULL;
-    i2s_dma_item_t* itemPrev = NULL;
 
     for(i=0; i< dmaCount; i++) {
-        itemPrev = item;
-
         i2 = (i+1) % dmaCount;
         item = &I2S[bus_num].dma_items[i];
         item->eof = 0;
@@ -164,7 +184,8 @@ bool i2sInitDmaItems(uint8_t bus_num) {
         item->free_ptr = NULL;
         item->buf = NULL;
     }
-    itemPrev->eof = 1;
+
+    I2S[bus_num].dma_items[I2S_DMA_INTR_BLOCK_IDX].eof = 1;
     item->eof = 1;
 
     I2S[bus_num].tx_queue = xQueueCreate(I2S_DMA_QUEUE_COUNT, sizeof(i2s_dma_item_t*));
@@ -261,7 +282,8 @@ void i2sInit(uint8_t bus_num,
         i2s_tx_fifo_mod_t fifo_mod, 
         size_t dma_count, 
         size_t dma_len) {
-    if (bus_num >= I2S_NUM_MAX) {
+
+   if (bus_num >= I2S_NUM_MAX) {
         return;
     }
 
@@ -431,28 +453,20 @@ esp_err_t i2sSetSampleRate(uint8_t bus_num, uint32_t rate, uint8_t bits) {
 
 
 
-void IRAM_ATTR i2sDmaISR(void* arg)
-{
+void IRAM_ATTR i2sDmaISR(void* arg) {
     i2s_bus_t* dev = (i2s_bus_t*)(arg);
 
-    if (dev->bus->int_st.out_eof) 
-    {
- //       i2s_dma_item_t* item = (i2s_dma_item_t*)(dev->bus->out_eof_des_addr);
-        if (dev->is_sending_data == I2s_Is_Pending)
-        {
+    if (dev->bus->int_st.out_eof) {
+        if (dev->is_sending_data == I2s_Is_Pending) {
+            // transmission has finished
             dev->is_sending_data = I2s_Is_Idle;
-        }
-        else if (dev->is_sending_data == I2s_Is_Sending)
-        {
-            // loop the silent items
-            i2s_dma_item_t* itemSilence = &dev->dma_items[1];
-            itemSilence->next = &dev->dma_items[0];
-
+        } else if (dev->is_sending_data == I2s_Is_Sending) {
+            // transmission has started, but not finished yet
+            dev->dma_items[I2S_DMA_GATE_BLOCK_IDX].next = &dev->dma_items[I2S_DMA_START_BLOCK_IDX];
             dev->is_sending_data = I2s_Is_Pending;
         }
     }
-
-    dev->bus->int_clr.val = dev->bus->int_st.val;
+    dev->bus->int_clr.val = dev->bus->int_st.val; // clear all interrupt flags
 }
 
 size_t i2sWrite(uint8_t bus_num, uint8_t* data, size_t len, bool copy, bool free_when_sent) {
@@ -461,12 +475,9 @@ size_t i2sWrite(uint8_t bus_num, uint8_t* data, size_t len, bool copy, bool free
     }
     size_t blockSize = len;
 
-    i2s_dma_item_t* item = &I2S[bus_num].dma_items[0]; 
+    i2s_dma_item_t* item = &I2S[bus_num].dma_items[I2S_DMA_DATA1_BLOCK_IDX];
     size_t dataLeft = len;
     uint8_t* pos = data;
-
-    // skip front two silent items
-    item += 2;
 
     while (dataLeft) {
         
@@ -486,13 +497,10 @@ size_t i2sWrite(uint8_t bus_num, uint8_t* data, size_t len, bool copy, bool free
         pos += blockSize;
     }
 
-
     // reset silence item to not loop
-    item = &I2S[bus_num].dma_items[1];
-    item->next = &I2S[bus_num].dma_items[2];
+    I2S[bus_num].dma_items[I2S_DMA_GATE_BLOCK_IDX].next = &I2S[bus_num].dma_items[I2S_DMA_INTR_BLOCK_IDX];
     I2S[bus_num].is_sending_data = I2s_Is_Sending;
         
-
     xQueueReset(I2S[bus_num].tx_queue);
     xQueueSend(I2S[bus_num].tx_queue, (void*)&I2S[bus_num].dma_items[0], 10);
 
