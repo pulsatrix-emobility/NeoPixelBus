@@ -19,10 +19,10 @@ idf_component_register(
         src/internal/colors/RgbwwwColor.cpp
         src/internal/colors/SegmentDigit.cpp
         src/internal/methods/Esp32_i2s.c
-        src/internal/methods/NeoEsp32RmtMethod.cpp
+        # src/internal/methods/NeoEsp32RmtMethod.cpp # not used by us
         src/internal/methods/NeoEsp8266I2sMethodCore.cpp
-        src/internal/methods/NeoEsp8266UartMethod.cpp
-        src/internal/methods/NeoEspBitBangMethod.cpp
+        # src/internal/methods/NeoEsp8266UartMethod.cpp # not used by us
+        # src/internal/methods/NeoEspBitBangMethod.cpp # not used by us
         src/internal/methods/NeoPixelAvr.c
         
         INCLUDE_DIRS "src"
