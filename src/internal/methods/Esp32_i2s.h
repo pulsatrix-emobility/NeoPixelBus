@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 
+#include "rom/gpio.h"
 #include "esp_err.h"
 
 #define I2S_DMA_MAX_DATA_LEN    4092// maximum bytes in one dma item

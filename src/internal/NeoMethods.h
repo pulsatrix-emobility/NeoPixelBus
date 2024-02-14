@@ -26,6 +26,8 @@ License along with NeoPixel.  If not, see
 -------------------------------------------------------------------------*/
 #pragma once
 
+#include "rom/gpio.h"
+
 // Generic Two Wire (clk and data) methods
 //
 #include "methods/DotStarGenericMethod.h"

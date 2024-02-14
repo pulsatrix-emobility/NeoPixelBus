@@ -29,6 +29,8 @@ License along with NeoPixel.  If not, see
 
 #pragma once
 
+#include "rom/gpio.h"
+
 #ifdef ARDUINO_ARCH_ESP32
 
 /*  General Reference documentation for the APIs used in this implementation
