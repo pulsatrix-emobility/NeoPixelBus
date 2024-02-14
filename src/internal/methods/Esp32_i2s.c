@@ -65,7 +65,10 @@ esp_err_t i2sSetSampleRate(uint8_t bus_num, uint32_t sample_rate, bool parallel_
 
 #define MATRIX_DETACH_OUT_SIG 0x100
 
-#if ESP_IDF_VERSION_MAJOR<=4
+#if ESP_IDF_VERSION_MAJOR>=5
+#include "esp_private/periph_ctrl.h"
+#endif
+#if ESP_IDF_VERSION_MAJOR<=5
 #define I2S_BASE_CLK (160000000L)
 #endif
 
